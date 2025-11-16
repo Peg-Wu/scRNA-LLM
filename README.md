@@ -61,7 +61,7 @@ sbatch submit.sh
 - <u>**Genetic Perturbation Prediction**</u>
 
 <p align="center">
-  <img src="assets/perturb.png" width="350">
+  <img src="assets/perturb.png" width="600">
 </p>
 
 ### 💕 4. Acknowledgement
