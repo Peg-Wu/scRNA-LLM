@@ -10,7 +10,7 @@
 - Model Architecture:
   - Transformer with DeepSeekMoE.
 - Pretraining Task:
-  - Maked Language Modeling (MLM). (Just like scBERT)
+  - Masked Language Modeling (MLM). (Just like scBERT)
 
 ### ⚙️ 1. Environment Configuration
 
@@ -60,11 +60,12 @@ sbatch submit.sh
 
 - <u>**Genetic Perturbation Prediction**</u>
 
-![Perturbation_Prediction](/assets/perturb.png)
+<p align="center">
+  <img src="assets/perturb.png" width="350">
+</p>
 
 ### 💕 4. Acknowledgement
 
 - Huggingface
 - scBERT
 - Geneformer
-- scGPT
