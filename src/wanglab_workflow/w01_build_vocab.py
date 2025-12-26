@@ -11,7 +11,7 @@ SOURCE_DATA_PATH = [
 
 
 def main():
-    vocab_builder = WangLabGeneSymbolVocabBuilder(nproc=32, verbosity=1)
+    vocab_builder = WangLabGeneSymbolVocabBuilder(nproc=32)
     vocab_builder(SOURCE_DATA_PATH, min_freq=0, vocab_save_dir="/fse/home/wupengpeng/STELLA/src/stella")
 
 

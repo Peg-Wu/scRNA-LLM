@@ -3,7 +3,7 @@ sys.path.append("../")
 
 import os
 import argparse
-from scphd.data import merge_datasets
+from stella.data import merge_datasets
 
 
 def main():

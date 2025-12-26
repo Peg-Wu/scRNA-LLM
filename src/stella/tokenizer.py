@@ -2,7 +2,6 @@ import random
 import pickle
 import logging
 import numpy as np
-import pandas as pd
 import scanpy as sc
 
 from enum import Enum
@@ -13,16 +12,12 @@ from datasets import Dataset
 from collections import Counter
 from typing import Union, Optional
 
+logger = logging.getLogger(__name__)
+
 
 VOCAB = Path(__file__).parent / "gene2id.pkl"
 PRETRAIN_DATA_PATH = Path(__file__).parent / "train_data_path.pkl"
 BIN_BOUNDARY = Path(__file__).parent / "bin_100.pkl"
-
-
-logging.basicConfig(
-    format="%(asctime)s | %(levelname)s | %(filename)s:%(lineno)s | %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S", level=logging.INFO
-)
 
 
 class TranscriptomeTokenizer:
@@ -83,21 +78,19 @@ class TranscriptomeTokenizer:
 
         # logging
         if len(self.train_data_path) == 0:
-            logging.error("No files need to be tokenized! Check your train_data_path_file!")
+            logger.error("No files need to be tokenized! Check your train_data_path_file!")
             raise
         else:
-            logging.info(f"{len(self.train_data_path)} files need to be tokenized!")
+            logger.info(f"{len(self.train_data_path)} files need to be tokenized!")
         
         # load bin boundary
         with open(bin_boundary_file, "rb") as f:
             self.bin_boundary = pickle.load(f)
         self.nbins = len(self.bin_boundary) - 1
 
-
     def read_h5ad_raw_counts(self, h5ad_file: Path) -> sc.AnnData:
         adata = sc.read_h5ad(h5ad_file)
         return adata
-
 
     def tokenize_anndata(
         self,
@@ -138,7 +131,6 @@ class TranscriptomeTokenizer:
         else:
             file_cell_metadata = None
         
-
         # Extract non-zero gene expression and their corresponding gene symbols
         def split_array_custom_sizes(arr, sizes):
             indices = np.cumsum(sizes)[:-1]
@@ -177,7 +169,6 @@ class TranscriptomeTokenizer:
         ds = ds.map(format_cell_features, num_proc=self.nproc, remove_columns="nonzero_col_indices")
         return ds
 
-
     def __call__(self, save_dir: Union[Path, str] = "./", split_into_bins: bool = True):
         """
         **Examples:**
@@ -190,7 +181,6 @@ class TranscriptomeTokenizer:
             ds = self.tokenize_anndata(f, split_into_bins)
             save_path = str(Path(save_dir) / str(i))
             ds.save_to_disk(save_path, num_proc=self.nproc)
-
 
     def bin(
         self,
@@ -209,7 +199,6 @@ class TranscriptomeTokenizer:
         adata.X[adata.X == self.nbins + 1] = self.nbins
         adata.X = adata.X.astype(np.int16)
 
-
     @staticmethod
     def qc(
         adata: sc.AnnData,
@@ -220,7 +209,7 @@ class TranscriptomeTokenizer:
         """ QC standards are set by `Hailin Wei`. """
         
         if nFeature == 0 and nCount == 0:
-            logging.warning("No cells/genes are removed!")
+            logger.warning("No cells/genes are removed!")
             return
 
         sc.pp.filter_cells(adata, min_genes = nFeature)
@@ -237,7 +226,6 @@ class TranscriptomeTokenizer:
         
         if 0 in adata.shape:
             raise ValueError("No cells/genes are retained, please change the quality control standard!")
-
 
     @staticmethod
     def normalize_and_log1p(
@@ -281,7 +269,6 @@ class TranscriptomeTokenizerForCellClassification(TranscriptomeTokenizer):
             self.bin_boundary = pickle.load(f)
         self.nbins = len(self.bin_boundary) - 1
 
-
     def read_h5ad_raw_counts(self, h5ad_file: Union[Path, AnnData]) -> sc.AnnData:
         if not isinstance(h5ad_file, AnnData):
             adata = sc.read_h5ad(h5ad_file)
@@ -294,7 +281,6 @@ class TranscriptomeTokenizerForCellClassification(TranscriptomeTokenizer):
         adata = adata[:, ~duplicated_genes].copy()
 
         return adata
-
 
     def __call__(
         self, 
@@ -356,7 +342,6 @@ class Preprocessor(TranscriptomeTokenizerForCellClassification):
 
         # check your attributes
         self.check_attr()
-
     
     def check_attr(self):
         if self.select_genes_mode == SELECT_GENES_MODE.USE_HVG.value and self.nhvgs is None:
@@ -368,7 +353,6 @@ class Preprocessor(TranscriptomeTokenizerForCellClassification):
         if self.select_genes_mode == SELECT_GENES_MODE.USE_HVG_AND_SPECIFY_GENE_LIST.value:
             assert self.nhvgs is not None and self.gene_list is not None, \
                 "Please specify the number of highly variable genes (nhvgs) and the gene list you have selected (gene_list)."
-    
 
     @staticmethod
     def _intersection_two_gene_lists(
@@ -379,14 +363,13 @@ class Preprocessor(TranscriptomeTokenizerForCellClassification):
         if len(intersection) == 0:
             raise ValueError("None of the genes in the specified gene_list are present in the processed adata.")
         elif len(intersection) == len(specify_gene_list):
-            print("All genes in the specified gene_list are present in the processed adata.")
+            logger.info("All genes in the specified gene_list are present in the processed adata.")
         else:
-            print(f"Among the genes in the specified gene_list, "
-                  f"{len(intersection)} are present in the processed adata, "
-                  f"while {len(specify_gene_list) - len(intersection)} are not.")
+            logger.info(f"Among the genes in the specified gene_list, "
+                        f"{len(intersection)} are present in the processed adata, "
+                        f"while {len(specify_gene_list) - len(intersection)} are not.")
         return intersection
     
-
     def __call__(self, h5ad_file: Union[Path, AnnData], split_into_bins: bool = True):
         # Read adata
         adata = self.read_h5ad_raw_counts(h5ad_file)
@@ -433,7 +416,6 @@ class Preprocessor(TranscriptomeTokenizerForCellClassification):
 
         return adata
     
-
     def get_hf_dataset_from_adata(self, adata):
         input_ids_gene_symbol = adata.var_names.map(self.gene2id).tolist()
         input_ids_gene_symbol = [input_ids_gene_symbol for _ in range(len(adata))]

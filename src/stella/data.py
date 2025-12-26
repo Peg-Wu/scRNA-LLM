@@ -8,28 +8,21 @@ from pathlib import Path
 from tqdm.auto import tqdm
 from tdigest import TDigest
 from joblib import Parallel, delayed
-from typing import Union, Literal, Optional, List
+from typing import Union, Optional, List
 from datasets import load_from_disk, concatenate_datasets
+
+logger = logging.getLogger(__name__)
 
 
 class TrainDataPathExtractor:
-    def __init__(self, nproc: int = 1, verbosity: Literal[0, 1] = 1):
+    def __init__(self, nproc: int = 1):
         r"""
         **Parameters:**
         nproc : int
             | Number of processes. (Accelerate the count of training cells)
-        verbosity : Literal[0, 1]
-            | Logging level. {0: "warning"; 1: "info"}.
         """
         self.train_data_path = {"data": []}
         self.nproc = nproc
-
-        if verbosity == 1:
-            logging.basicConfig(
-                format="%(asctime)s | %(levelname)s | %(filename)s:%(lineno)s | %(message)s",
-                datefmt="%Y-%m-%d %H:%M:%S", level=logging.INFO
-            )
-
 
     def find_h5ad(self, filepath: Union[Path, str]) -> List[Path]:
         if not isinstance(filepath, Path):
@@ -37,13 +30,11 @@ class TrainDataPathExtractor:
 
         fp = list(filepath.rglob("*.h5ad"))
 
-        logging.info(f"Find {len(fp)} h5ad files in {str(filepath)}!")
+        logger.info(f"Find {len(fp)} h5ad files in {str(filepath)}!")
         return fp
-
 
     def count_train_cells_from_h5ad(self, h5ad_fp: Path) -> int:
         return len(sc.read_h5ad(h5ad_fp, backed="r"))
-
 
     def __call__(
         self, 
@@ -56,7 +47,7 @@ class TrainDataPathExtractor:
 
         **Examples:**
             >>> from stella.data import TrainDataPathExtractor
-            >>> extractor = TrainDataPathExtractor(nproc=8, verbosity=1)
+            >>> extractor = TrainDataPathExtractor(nproc=8)
 
             >>> data = ["dir1", "dir2", ...]
             >>> extractor(data, count_total_train_cells=True)
@@ -82,14 +73,14 @@ class TrainDataPathExtractor:
             counts = Parallel(n_jobs=self.nproc)(delayed(self.count_train_cells_from_h5ad)(f) \
                                                  for f in tqdm(self.train_data_path["data"]))
             self.train_data_path["ncells"] = sum(counts)
-            logging.info(f"Total training cells: {self.train_data_path['ncells']:,d}")
+            logger.info(f"Total training cells: {self.train_data_path['ncells']:,d}")
 
         # save
         if save_dir is not None:
             Path(save_dir).mkdir(parents=True, exist_ok=True)
             with open(Path(save_dir) / "train_data_path.pkl", "wb") as f:
                 pickle.dump(self.train_data_path, f)
-            logging.info(f"Train data path has saved into {str(save_dir)}!")
+            logger.info(f"Train data path has saved into {str(save_dir)}!")
 
 
 class GlobalBinExpression:
@@ -121,7 +112,6 @@ class GlobalBinExpression:
         self.global_tdigest = None  # generate by self.process
         self.bin_results = None  # generate by self.process
 
-
     def _process(self, fp: str) -> TDigest:
         tmp_tdigest = TDigest()
 
@@ -141,7 +131,6 @@ class GlobalBinExpression:
         
         return tmp_tdigest
 
-
     def process(self):
         # reinitialization
         self.bin_results = []
@@ -154,22 +143,21 @@ class GlobalBinExpression:
             )
         
         # merge all tdigests
-        print("Merging all tdigest objects ...")
+        logger.info("Merging all tdigest objects ...")
         for tdigest in tqdm(all_tdigests):
             self.global_tdigest += tdigest
         
         # bin
-        print("Binning ...")
+        logger.info("Binning ...")
         for q in tqdm(np.linspace(0, 1, self.nbins + 1)):
             self.bin_results.append(self.global_tdigest.percentile(q * 100))
 
-
     def save_bin_results(self, save_dir: str):
-        print("Saving bin tdigest object ...")
+        logger.info("Saving bin tdigest object ...")
         with open(Path(save_dir) / "tdigest.pkl", "wb") as f:
             pickle.dump(self.global_tdigest, f)  # You can reuse `global_tdigest` to quickly split bins!
 
-        print("Saving bin results ...")
+        logger.info("Saving bin results ...")
         with open(Path(save_dir) / f"bin_{self.nbins}.pkl", "wb") as f:
             pickle.dump(self.bin_results, f)
 
@@ -179,7 +167,7 @@ def global_bin_from_tdigest_pkl_file(
     nbins: int,
     save_dir: str
 ):
-    print(f"Bin into {nbins} ...")
+    logger.info(f"Bin into {nbins} ...")
     with open(tdigest_pkl_file, "rb") as f:
         global_tdigest = pickle.load(f)
 
@@ -187,7 +175,7 @@ def global_bin_from_tdigest_pkl_file(
     for q in tqdm(np.linspace(0, 1, nbins + 1)):
         bin_results.append(global_tdigest.percentile(q * 100))
     
-    print("Saving bin results ...")
+    logger.info("Saving bin results ...")
     with open(Path(save_dir) / f"bin_{nbins}.pkl", "wb") as f:
         pickle.dump(bin_results, f)
 
@@ -204,7 +192,7 @@ def merge_datasets(
 
     dataset_path = list(data_dir.glob("*"))  # dataset path
     dataset_num = len(dataset_path)  # dataset number
-    print(f"{dataset_num} datasets detected.")
+    logger.info(f"{dataset_num} datasets detected.")
 
     pbar = tqdm(range(0, dataset_num, chunk_size))
     for i in pbar:
@@ -256,11 +244,9 @@ class WangLabTrainDataPathExtractor(TrainDataPathExtractor):
                 fn_path_list.append(p)
 
         self.train_data_path["data"].extend(list(set(fr_path_list) - set(fn_path_list)))
-    
 
     def count_train_cells_from_h5ad(self, h5ad_fp: Path) -> int:
         return sc.read_h5ad(h5ad_fp, backed="r").raw.shape[0]
-
 
     def __call__(
         self, 
@@ -275,7 +261,7 @@ class WangLabTrainDataPathExtractor(TrainDataPathExtractor):
         ...     "/fse/DC/human/qc_final_tmp",          # round 1
         ...     "/fse/DC/human/second_qc_final",       # round 2
         ... ]
-        >>> extractor = WangLabTrainDataPathExtractor(nproc=32, verbosity=1)
+        >>> extractor = WangLabTrainDataPathExtractor(nproc=32)
         >>> extractor(data, save_dir="./stella", count_total_train_cells=True)
         """
         if isinstance(h5ad_dirs, str):
@@ -287,13 +273,13 @@ class WangLabTrainDataPathExtractor(TrainDataPathExtractor):
             all_h5ad.extend(self.find_h5ad(h5ad_dir))
         
         self.train_data_path["data"] = list(set(self.train_data_path["data"]) & set(all_h5ad))  # double check
-        logging.info(f"Total training samples: {len(self.train_data_path['data'])}")
+        logger.info(f"Total training samples: {len(self.train_data_path['data'])}")
         
         if count_total_train_cells:
             counts = Parallel(n_jobs=self.nproc)(delayed(self.count_train_cells_from_h5ad)(f) \
                                                  for f in tqdm(self.train_data_path["data"]))
             self.train_data_path["ncells"] = sum(counts)
-            logging.info(f"Total training cells: {self.train_data_path['ncells']:,d}")
+            logger.info(f"Total training cells: {self.train_data_path['ncells']:,d}")
 
         # save
         if save_dir is not None:

@@ -21,8 +21,8 @@ from transformers import (
     set_seed
 )
 from datasets import load_from_disk
-from stella import STELLADataCollatorV2
 from stella.utils import print_trainable_parameters
+from stella import STELLADataCollatorV2, setup_root_logger
 from stella.arguments import DataArguments, ModelArguments
 from stella.models import STELLAConfig, STELLAForMaskedLM
 
@@ -47,11 +47,7 @@ def main():
         )
 
     # Setup logging
-    logging.basicConfig(
-        format="%(asctime)s | %(levelname)s | %(filename)s:%(lineno)s | %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
-        level=logging.INFO if training_args.local_rank in [-1, 0] else logging.WARN,
-    )
+    setup_root_logger()
 
     logger.warning(
         "Process rank: %s, device: %s, n_gpu: %s, distributed training: %s, 16-bits training: %s",

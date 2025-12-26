@@ -11,7 +11,7 @@ SOURCE_DATA_PATH = [
 
 
 def main():
-    extractor = WangLabTrainDataPathExtractor(nproc=32, verbosity=1)
+    extractor = WangLabTrainDataPathExtractor(nproc=32)
     extractor(SOURCE_DATA_PATH, save_dir="/fse/home/wupengpeng/STELLA/src/stella", count_total_train_cells=True)
 
 

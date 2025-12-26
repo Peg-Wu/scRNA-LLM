@@ -4,10 +4,11 @@ import scanpy as sc
 
 from pathlib import Path
 from tqdm.auto import tqdm
+from typing import Union, List
 from collections import Counter
 from joblib import Parallel, delayed
-from typing import Literal, Union, List
 
+logger = logging.getLogger(__name__)
 
 sc.settings.verbosity = 0  # verbosity: errors (0), warnings (1), info (2), hints (3)
 
@@ -24,25 +25,16 @@ MASK_TOKEN_ID = 101  # To be the last token in bin_vocab!
 
 
 class GeneSymbolVocabBuilder:
-    def __init__(self, nproc: int = 1, verbosity: Literal[0, 1] = 1):
+    def __init__(self, nproc: int = 1):
         r"""
         **Parameters:**
         nproc : int
             | Number of processes.
-        verbosity : Literal[0, 1]
-            | Logging level. {0: "warning"; 1: "info"}.
         """
         self.vocab = {} | STELLA_SPECIAL_TOKENS
         self.num_special_tokens = len(STELLA_SPECIAL_TOKENS)
         self.gene_counter = Counter()
         self.nproc = nproc
-
-        if verbosity == 1:
-            logging.basicConfig(
-                format="%(asctime)s | %(levelname)s | %(filename)s:%(lineno)s | %(message)s",
-                datefmt="%Y-%m-%d %H:%M:%S", level=logging.INFO
-            )
-
 
     def find_h5ad(self, filepath: Union[Path, str]) -> List[Path]:
         if not isinstance(filepath, Path):
@@ -50,9 +42,8 @@ class GeneSymbolVocabBuilder:
 
         fp = list(filepath.rglob("*.h5ad"))
 
-        logging.info(f"Find {len(fp)} h5ad files!")
+        logger.info(f"Find {len(fp)} h5ad files!")
         return fp
-
 
     def extracted_from_h5ad(self, h5ad_fp: Path) -> Counter:
         # you can modify here to extract gene symbols from your own h5ad file.
@@ -60,24 +51,21 @@ class GeneSymbolVocabBuilder:
         adata_genes = adata.var_names.str.replace(r'\.\d+$', '', regex=True)
         return Counter(adata_genes)
 
-
     def remove_low_freq_genes(self, gene_counter: Counter, min_freq: int) -> List[str]:
         final_gene_list = [k for k, v in gene_counter.items() if v > min_freq]
 
-        logging.info(f"Totally remove {len(gene_counter) - len(final_gene_list)} genes.")
+        logger.info(f"Totally remove {len(gene_counter) - len(final_gene_list)} genes.")
         return final_gene_list
-
 
     def _build(self, filepath: Union[Path, str]):
         
-        logging.info(f"Processing h5ad files in {str(filepath)}")
+        logger.info(f"Processing h5ad files in {str(filepath)}")
 
         fp = self.find_h5ad(filepath)
 
         counters = Parallel(n_jobs=self.nproc)(delayed(self.extracted_from_h5ad)(f) for f in tqdm(fp))
         for counter in counters:
             self.gene_counter += counter
-
 
     def __call__(
         self, 
@@ -90,7 +78,7 @@ class GeneSymbolVocabBuilder:
 
         **Examples:**
             >>> from stella.vocab import GeneSymbolVocabBuilder
-            >>> gvb = GeneSymbolVocabBuilder(nproc=8, verbosity=1)
+            >>> gvb = GeneSymbolVocabBuilder(nproc=8)
             
             >>> data = ["dir1", "dir2", ...]
             >>> gvb(data, min_freq=0, vocab_save_dir="./")
@@ -117,13 +105,13 @@ class GeneSymbolVocabBuilder:
         self.vocab = \
             self.vocab | dict(zip(final_gene_list, range(self.num_special_tokens, len(final_gene_list) + self.num_special_tokens)))
 
-        logging.info(f"Vocab size: {len(self.vocab)}, including {self.num_special_tokens} special tokens.")
+        logger.info(f"Vocab size: {len(self.vocab)}, including {self.num_special_tokens} special tokens.")
 
         # save vocab
         with open(Path(vocab_save_dir) / "gene2id.pkl", "wb") as f:
             pickle.dump(self.vocab, f)
         
-        logging.info(f"Saving vocab to {str(Path(vocab_save_dir).absolute())}")
+        logger.info(f"Saving vocab to {str(Path(vocab_save_dir).absolute())}")
 
 
 ###################
@@ -163,7 +151,6 @@ class WangLabGeneSymbolVocabBuilder(GeneSymbolVocabBuilder):
             # step3: 返回 Counter 对象统计每个 gene 名称出现的频次
             return Counter(adata_genes)
 
-
     def add_attr_raw_counts_fp(self, h5ad_dir: Union[Path, str]):
         if not isinstance(h5ad_dir, Path):
             h5ad_dir = Path(h5ad_dir)
@@ -189,7 +176,6 @@ class WangLabGeneSymbolVocabBuilder(GeneSymbolVocabBuilder):
 
         self.raw_counts_fp = list(set(fr_path_list) - set(fn_path_list))
 
-
     def __call__(
         self, 
         h5ad_dirs: Union[List[str], str],
@@ -203,7 +189,7 @@ class WangLabGeneSymbolVocabBuilder(GeneSymbolVocabBuilder):
             ...     "/fse/DC/human/qc_final_tmp",          # round 1
             ...     "/fse/DC/human/second_qc_final",       # round 2
             ... ]
-            >>> gvb = WangLabGeneSymbolVocabBuilder(verbosity=1, nproc=32)
+            >>> gvb = WangLabGeneSymbolVocabBuilder(nproc=32)
             >>> gvb(data, min_freq=0, vocab_save_dir="./stella")
         """
         if min_freq != 0 and "[UNK]" not in STELLA_SPECIAL_TOKENS:
@@ -221,14 +207,14 @@ class WangLabGeneSymbolVocabBuilder(GeneSymbolVocabBuilder):
         self.vocab = \
             self.vocab | dict(zip(final_gene_list, range(self.num_special_tokens, len(final_gene_list) + self.num_special_tokens)))
 
-        logging.info(f"Vocab size: {len(self.vocab)}, including {self.num_special_tokens} special tokens.")
+        logger.info(f"Vocab size: {len(self.vocab)}, including {self.num_special_tokens} special tokens.")
 
         # save gene2id & gene2freq
         with open(Path(vocab_save_dir) / "gene2id.pkl", "wb") as f1, open(Path(vocab_save_dir) / "gene2freq.pkl", "wb") as f2:
             pickle.dump(self.vocab, f1)
             pickle.dump(dict(self.gene_counter), f2)
         
-        logging.info(f"Saving vocab to {str(Path(vocab_save_dir).absolute())}")
+        logger.info(f"Saving vocab to {str(Path(vocab_save_dir).absolute())}")
 
 
 if __name__ == "__main__":

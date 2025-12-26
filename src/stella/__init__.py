@@ -1,3 +1,11 @@
+from .logging import (
+    set_verbosity_info, 
+    get_logger, 
+    setup_root_logger
+)
+
+set_verbosity_info()
+
 from functools import partial
 
 from .vocab import (

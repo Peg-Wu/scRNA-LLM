@@ -48,7 +48,6 @@ class STELLAPreCollator(PreTrainedTokenizerBase):
         "attention_mask"
     ]
 
-
     def _pad(
         self,
         encoded_inputs: Union[Dict[str, EncodedInput], BatchEncoding],
@@ -140,7 +139,6 @@ class STELLAPreCollator(PreTrainedTokenizerBase):
                 raise ValueError(f"Invalid padding strategy:{padding_side}")
 
         return encoded_inputs
-    
 
     def convert_tokens_to_ids(self, tokens: Union[str, List[str]]) -> Union[int, List[int]]:
         """
@@ -163,14 +161,12 @@ class STELLAPreCollator(PreTrainedTokenizerBase):
         for token in tokens:
             ids.append(self._convert_token_to_id_with_added_voc(token))
         return ids
-    
 
     def _convert_token_to_id_with_added_voc(self, token):
         if token is None:
             return None
 
         return VOCAB.get(token)
-
 
     def __len__(self):
         return len(VOCAB)
